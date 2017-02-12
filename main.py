@@ -8,13 +8,6 @@ http_client = AsyncHTTPClient()
 INCOMING_PORT = 8006
 OUTGOING_PORT = 8080
 
-EXCLUDE_HEADERS = (
-    'Content-Length',
-    'Transfer-Encoding',
-    'Content-Encoding',
-    'Connection'
-)
-
 
 class ReverseProxyHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
@@ -34,8 +27,9 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
             new_url,
             callback=self.on_response,
             headers=self.request.headers,
-            method=self.request.method,
+            method=method,
             body=body,
+            decompress_response=False,
         )
 
     def on_response(self, resp):
@@ -43,13 +37,9 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
 
         self._headers = tornado.httputil.HTTPHeaders()
         for header, v in resp.headers.get_all():
-            if header not in EXCLUDE_HEADERS:
-                self.add_header(header, v)
+            self.add_header(header, v)
 
-        if resp.body:
-            self.set_header('Content-Length', len(resp.body))
-            self.write(resp.body)
-
+        self.write(resp.body)
         self.finish()
 
     def convert_url(self, request):
