@@ -77,19 +77,19 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
         key = get_request_hash(new_url, body)
 
         if key in cache:
-            self.on_response(None, cache[key])
+            self.on_response(None, True, cache[key])
             return
 
         http_client.fetch(
             new_url,
-            callback=partial(self.on_response, key),
+            callback=partial(self.on_response, key, False),
             headers=self.request.headers,
             method=method,
             body=body,
             decompress_response=False,
         )
 
-    def on_response(self, key, resp):
+    def on_response(self, key, is_from_cache, resp):
         content_type = resp.headers['Content-Type']
         if key and not contains(content_type, CONTENT_TO_NOT_CACHE):
             cache[key] = resp
@@ -99,6 +99,8 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
         self._headers = tornado.httputil.HTTPHeaders()
         for header, v in resp.headers.get_all():
             self.add_header(header, v)
+
+        self.add_header('X-reverse-proxy', is_from_cache)
 
         self.write(resp.body)
         self.finish()
