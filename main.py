@@ -2,6 +2,7 @@ import json
 import hashlib
 from urllib import urlencode
 from urlparse import urlparse, urlunparse, parse_qs
+from functools import partial
 
 import tornado.ioloop
 import tornado.web
@@ -27,7 +28,7 @@ def get_request_hash(url, body):
 
     # sort the query params
     u = u._replace(query=urlencode(sorted(query.items()), True))
-    m.udpate(urlunparse(u))
+    m.update(urlunparse(u))
 
     if body:
         m.update(json.dumps(body, sort_keys=True))
@@ -49,16 +50,24 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
         body = self.request.body if method == 'POST' else None
         new_url = self.convert_url(self.request)
 
-        http_client.fetch(
-            new_url,
-            callback=self.on_response,
-            headers=self.request.headers,
-            method=method,
-            body=body,
-            decompress_response=False,
-        )
+        key = get_request_hash(new_url, body)
 
-    def on_response(self, resp):
+        if key in cache:
+            self.on_response(None, cache[key])
+        else:
+            http_client.fetch(
+                new_url,
+                callback=partial(self.on_response, key),
+                headers=self.request.headers,
+                method=method,
+                body=body,
+                decompress_response=False,
+            )
+
+    def on_response(self, key, resp):
+        if key:
+            cache[key] = resp
+
         self.set_status(resp.code)
 
         self._headers = tornado.httputil.HTTPHeaders()
