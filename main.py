@@ -12,8 +12,27 @@ from tornado.httpclient import AsyncHTTPClient
 INCOMING_PORT = 8006
 OUTGOING_PORT = 8080
 
+ROUTES_TO_IGNORE = [
+    '/api/batch_track'
+]
+
+CONTENT_TO_NOT_CACHE = [
+    'text/html',
+    'text/css',
+    'application/javascript',
+    'text/javascript',
+]
+
+
 http_client = AsyncHTTPClient()
 cache = {}
+
+
+def contains(haystack, needles):
+    for needle in needles:
+        if needle in haystack:
+            return True
+    return False
 
 
 def get_request_hash(url, body):
@@ -43,13 +62,14 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def post(self):
-        if '/api/batch_track' in self.request.uri:
-            self.set_status(200)
-            self.finish()
-        else:
-            self.fetch()
+        self.fetch()
 
     def fetch(self):
+        if contains(self.request.uri, ROUTES_TO_IGNORE):
+            self.set_status(200)
+            self.finish()
+            return
+
         method = self.request.method
         body = self.request.body if method == 'POST' else None
         new_url = self.convert_url(self.request)
@@ -58,18 +78,20 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
 
         if key in cache:
             self.on_response(None, cache[key])
-        else:
-            http_client.fetch(
-                new_url,
-                callback=partial(self.on_response, key),
-                headers=self.request.headers,
-                method=method,
-                body=body,
-                decompress_response=False,
-            )
+            return
+
+        http_client.fetch(
+            new_url,
+            callback=partial(self.on_response, key),
+            headers=self.request.headers,
+            method=method,
+            body=body,
+            decompress_response=False,
+        )
 
     def on_response(self, key, resp):
-        if key:
+        content_type = resp.headers['Content-Type']
+        if key and not contains(content_type, CONTENT_TO_NOT_CACHE):
             cache[key] = resp
 
         self.set_status(resp.code)
