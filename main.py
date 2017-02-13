@@ -43,7 +43,11 @@ class ReverseProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def post(self):
-        self.fetch()
+        if '/api/batch_track' in self.request.uri:
+            self.set_status(200)
+            self.finish()
+        else:
+            self.fetch()
 
     def fetch(self):
         method = self.request.method
