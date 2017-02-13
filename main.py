@@ -1,12 +1,38 @@
+import json
+import hashlib
+from urllib import urlencode
+from urlparse import urlparse, urlunparse, parse_qs
+
 import tornado.ioloop
 import tornado.web
 import tornado.httputil
 from tornado.httpclient import AsyncHTTPClient
 
-
-http_client = AsyncHTTPClient()
 INCOMING_PORT = 8006
 OUTGOING_PORT = 8080
+
+http_client = AsyncHTTPClient()
+cache = {}
+
+
+def get_request_hash(url, body):
+    m = hashlib.md5()
+
+    # hash the url
+    u = urlparse(url)
+    query = parse_qs(u.query)
+
+    # remove cache busting query param
+    query.pop('_', None)
+
+    # sort the query params
+    u = u._replace(query=urlencode(sorted(query.items()), True))
+    m.udpate(urlunparse(u))
+
+    if body:
+        m.update(json.dumps(body, sort_keys=True))
+
+    return m.hexdigest()
 
 
 class ReverseProxyHandler(tornado.web.RequestHandler):
